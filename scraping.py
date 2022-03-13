@@ -14,8 +14,8 @@ def main():
         tgs.get_match_record() # 各試合の情報を抽出
         tgs.get_team_info() # 各チームの情報を抽出
         # save
-        tgs.save_match_table_as_csv(filepath=fr'C:\Users\Masat\デスクトップ_Instead\webアプリ開発\Tleague_scraping\{season_year}_match_result.csv')
-
+        tgs.save_match_table_as_csv(filepath=fr'C:\Users\Masat\デスクトップ_Instead\webアプリ開発\causal_inference_teamMutch_doubles\{season_year}_match_result.csv')
+        
         del tgs
 
 if __name__ == "__main__":

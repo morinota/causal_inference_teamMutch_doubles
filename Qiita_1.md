@@ -1,5 +1,5 @@
 <!-- 記事タイトル -->
-<!-- ステップ①回帰モデルとバックドア基準を用いて因果効果を評価-->
+<!-- Tリーグ試合データをスクレイピング -->
 # 始めに
 卓球競技の団体戦において、「ダブルスが重要である」「ダブルスが団体戦の鍵をにぎる」と経験知としてよく言われます。
 学生時代等に卓球に打ち込んだ方々は、顧問の先生やクラブチームのコーチから言われたことがある人も少なくないのではないでしょうか。
@@ -12,145 +12,302 @@
 
 自身の統計的因果推論の練習を兼ねてますので、見識がある方からのツッコミは歓迎しております！
 また私同様に、卓球が好きな方からのコメント・ツッコミも歓迎しております！
-この記事は○○の続きになりますが、「分析パートだけ見ればいいや！」って方は前記事を読まなくても理解に支障ありません！
+# ステップ0-1 どんなデータを用いる？
+さて、上述した分析を行うに当たって、まずはともかくデータセットが必要になります。
+必要なデータセットは、基本的には団体戦の結果に関するデータですね。
+団体戦の結果の公開状況を考慮して、今回はTリーグの試合結果のデータを用いる事にしました。
 
-# (統計的)因果推論って何だっけ?
-実は、現実世界の観測データから因果関係を捉える事は中々難しいようです。
-例えば、観測データから散布図を作成したとします。
-しかし散布図だけをいくら眺めていても、どうやら「**Xの値が大きいときに、Yの値も大きいという関係がありそうだ**」という事が分かっても、「**Xの値を大きくした時に、Yの値も大きくなるかどうか**」は分かりません。
-前者は**相関関係(狭義の)**、後者が**因果関係**に対応します。
+Tリーグは2018年からスタートした、日本初の卓球競技のプロリーグです。
+2021-2022シーズンにおいては、男子4チーム、女子5チームでそれぞれ優勝を争います。
+Tリーグの試合形式は団体戦です。ざっくり説明すると、1つの団体戦の中でダブルス、シングルス1、シングルス2、シングルス3、ビクトリーマッチの順に計5試合行われます。そして3試合勝利したチームの勝利となります。
+(試合形式に関してもう少し詳細を説明すると、ビクトリーマッチは必ずしも行われる訳ではなく、シングルス3を終えた時点で団体戦の勝敗が決していない場合にのみ実施されます。)
+従って団体戦の勝敗＋上記の5種類の試合の勝敗のデータが、本記事において主要なデータになります。
 
-(統計的)因果推論とは、「観測データからいかに"因果関係"に迫るか」をモチベーションにした方法論、のようです。
+実は本記事の目的を達成する為には、恐らく上記の試合結果(ダブルス等、各試合の勝敗＋団体戦の勝敗)以外にもデータが必要になります。
+詳しくは次の記事以降で書く予定ですが、「ダブルスの勝敗」と「団体戦の勝敗」の因果関係を検討する為には、それらの両方に影響を与えうる第三の因子(1つとも限りません)を考慮した分析を行う必要がある為です。統計的因果推論の世界では、この第三の因子を"交絡因子"と呼び、この「交絡因子にいかに対応するか」が重要であるようです。
 
-以下に、因果推論に関する用語を少し整理します。(飛ばして貰ってもOKです!)
-- 相関関係(狭義の):
-  - 2つの変数の間に、一方の変数の値が大きいときに多方の変数の値も大きい(小さい)という、直線的な関係がある場合.
-- 因果関係：
-  - 要因Xを変化させた時に、要因Yも変化する場合、「XとYの間に因果関係がある」という。
-  - 要因Xを**原因**、要因Yをその**結果**、と呼ぶ.
-  - 原因を示す変数＝**原因変数**、結果を表す変数＝**結果変数(アウトカム)**と呼ぶ.
-  (今回の場合は、"ダブルスの勝敗"が原因変数、"団体戦の勝敗"が結果変数になります。)
-  - また、原因変数を操作して結果変数を変化させる事を、介入(Intervention)、処置(Treatment)等という。
-- 因果効果：
-  - 人を対象とした場合には、「同じ人物が、介入を受けた場合の結果変数の値と、介入を受けなかった場合の結果変数の値の差」
+# ステップ0-2 TリーグのHPから試合結果のデータをスクレイピング
+データ収集方法に関しては、TリーグのHPから過去の試合結果のデータをスクレイピングさせていただく事にしました。
+当然、手作業で一試合一試合csvファイルに打ち込むより遙かに効率的ですし、元々スクレイピングによるデータ収集の自動化・効率化、みたいな技術にも興味があったので練習がてら作ってみました。
 
-## 交絡因子の存在
-因果推論においてとにかく重要な事は、「相関関係は必ずしも因果関係を意味しない」事になります。
-変数間に因果関係があれば相関関係も観測されますが、逆は必ずしも真ではないのです。
+Tリーグの試合データのスクレイピングに関しては、先人の方々がいらっしゃったので参考にさせていただきました。良記事、ありがとうございました！
+- Shisato 様(https://www.eureka-moments-blog.com/entry/2020/04/30/173420)
+- ishigenの技術ブログ 様(https://ishigentech.hatenadiary.jp/entry/2019/03/09/160224)
 
-なぜ相関関係は必ずしも因果関係を意味しないのか、その大きな要因は"交絡因子"の存在です。
-"交絡因子"に関して、因果ダイアグラム(因果グラフ)と呼ばれる図を使って説明します。
+昨年のシーズン辺りで、TリーグのHPのデザインレイアウトやURLに変更があった様で、Webページの中身やHTMLにそこまで詳しくない事もあり、中々苦戦しました。
 
-```mermaid
-flowchart TD
+以下、スクレイピング用のコードになります。
+まずは、スクレイピング用の処理を管理する為の、TleagueGameScrapingクラスの定義のファイルです。
+(これまで自分自身でクラスを定義する事があまり無かったので、属性をたくさん作ってしまいました。不要な属性や冗長な点もあるかと思います笑)
+<!-- コード挿入 -->
 
-C --> X
-C --> Y
+```python:scraping_class.py  
 
-```
-因果関係のない変数XとYに、ある共通の要因Cが影響を与えている(因果関係を持つ)場合を考えます。
-この構造において、要因Cが変化した場合、XとYも変化します。
-そして仮に分析者がXとYの変化のみを観測していた場合、Xの変化によってYが変化した(もしくはその逆)と誤解してしまう可能性がありますよね...
+import requests # HTMLファイルの取得用
+from bs4 import BeautifulSoup # HTMLファイルの解析用
+import pandas as pd
 
-このような構造を**交絡(Confounding)**、XとYに影響を与えている共通の要因Cを**交絡因子(Confounding Factor)**と呼びます。
-そして、本来は関連のない変数(XとY)の間に、交絡によって生じる相関関係の事を、**疑似相関(Spurious Correlation)**と呼びます。
+class TleagueGameScraping:
+    def __init__(self, season_year):
+        self.season_year = season_year
+        self.base_url = "https://tleague.jp/schedule/"
+        self.base_url_team = "https://tleague.jp/player/"
+        self.is_end = False
 
-統計的因果推論は、「交絡因子にいかに対処するか」というのが重要であるようです。
+    # 実際に試合データを取ってくるページのLinkのリストを取得する
+    def get_link(self):
+        self.link_list = []
+        url = self.base_url + "?season=" + self.season_year
 
-## 回帰モデルを用いた統計的因果推論
-統計的因果推論において最も基本的な手法の1つに、回帰モデルを用いた手法があります。
-結果変数yを被説明変数、原因変数xを説明変数として、以下の回帰モデルを構成したとします。
+        # Requestsのget関数にアクセス先のurlを与えてHTMLファイルを取得.
+        ## これはGETメソッドのリクエストをサーバーに送ってレスポンスを取得している.
+        response = requests.get(url)
+        print(response) #=>[200] は成功レスポンス.
 
-```math
-y ～ Norm_y(\mu, \sigma^2) \\
-\mu = \beta_0 +\beta_1 x
-```
+        # BeautifulSoupオブジェクトを生成.
+        ## .content属性でHTMLのbytes形式のデータを取得."lxml"はパース(読み取り)方式の一種.
+        soup = BeautifulSoup(response.content, "lxml")
 
-ここで、もし**結果変数と原因変数の両者に影響を与える交絡因子がなければ**、xの傾きのパラメータβ_1は結果変数と原因変数の関係の強さ=因果効果をそのまま表していると解釈できます。
+        #以下は、htmlの中身を取得する操作
+        ## まず各試合がレコードになった表部分のhtmlを取得
+        matchlist = soup.find(class_="table-responsive mb-30")
+        ## 次に各試合のレコードを操作(1シーズン88試合?)：
+        for i in matchlist.find_all(name="tr"):
+            # 各試合の詳細へ繋がるurlリンクを取得
+            inner = i.find(class_="text-center align-middle p-2 text-nowrap")
+            # print(type(inner))
 
-しかし仮に両者に影響を与える交絡因子zが存在していた場合、上記の回帰モデルで得られる回帰係数β_1は、因果効果と一致しません。
-交絡により疑似相関が発生している可能性があるからです。
+            # URLリンクを抽出(例外処理付)
+            try:
+                href = inner.find('a').get('href')
+            except AttributeError:
+                href = ''
+            # リストに加える.
+            self.link_list.append(href[10:])
+        # print(self.link_list)
 
-この場合は、交絡因子zをモデルの説明変数に追加する事で対処します。
-```math
-y ～ Norm_y(\mu, \sigma^2) \\
-\mu = \beta_0 +\beta_1 x + \beta_2 z
-```
-もう一度思い出しておくと、交絡因子zが問題を起こしていたのは、**zが変化した場合に、それに伴ってxとyも変化してしまう**為に、**yが変化したのは、(1)xが変化した為なのか、(2)zが変化してxとyが変化した為にxが変化してyも変化したように見えるだけなのか、の2つに区別が付かない**点にあります。
 
-従って、どうにかして交絡因子zの値を固定してしまえばこの問題は解決されます。
-重回帰モデルでは、任意の変数の傾きのパラメータβ(偏回帰係数)は他の変数の値を固定した場合にその変数の値を1変化させた時のyの変化量を表している、と解釈できます。
-つまり、上式のβ_1は、**交絡因子zの値を固定してxの値を変化させた場合に、yがどれだけ変化するか=因果効果**の推定値と見なせます。
-ちなみに、交絡因子が複数ある場合はそれらを同時に説明変数としてモデルに投入してしまえば良いようです。
+    def get_match_record(self):
+        i = 1
+        # 各試合のデータを抽出するinner関数
+        def _get_each_match_record(i):
+            game_result_dict = {}
+            url_each_mutch = self.base_url + self.link_list[i]
+            # print(url_each_mutch)
+            # 各試合のスコアをhtmlから取得.
+            try:
+                response_match = requests.get(url_each_mutch)
+                soup_match = BeautifulSoup(response_match.content, "lxml")
+                # 以下はhtmlファイルの操作
+                table = soup_match.find(name="table", class_="table table-borderless my-3")
+                game_list = table.find_all(name="tr")
 
-## バックドア基準とは？＝どんな説明変数を加えるべき?
-バックドア基準ってなんぞや？という事なんですが、意味合いとしては以下の事を判断する基準のようなものです。
-「回帰分析において『X=>Yの偏回帰係数』が『X=>Yの因果効果』と一致する（ズレない）為には、どの変数を回帰モデルに加えるべきか/べきではないのか」
-バックドア基準について本記事でがっつり話してしまうと、読む方が飽きてしまうかもしれないので、本記事ではこれ以上触れません！
-ただ、「交絡因子を説明変数に加える事はバックドア基準を満たす」すなわち「交絡因子を説明変数に加える事で、『説明変数X=>被説明変数Yの偏回帰係数』が『原因変数X=>結果変数Yの因果効果』と一致する」という事だけ覚えていれば、本記事の内容は理解できると思います。
+                #各試合のスコアを格納する処理
+                result_names = ["db", "s1", "s2", "s3", "vm"]
+                for i, game_html in enumerate(game_list):
+                    result = game_html.find("div", class_="text-white text-center font-weight-bold").text
+                    # 抽出したHTML文字列の加工(半角数字以外を取り除く)
+                    result = re.sub(pattern="[^0-9]", repl='', string=result)
+                    # 試合結果のdictに、加工したHTML文字列を格納(文字列として)
+                    game_result_dict[result_names[i]] =str(result)
 
-# いざ、「ダブルスの勝敗」が「団体戦の勝敗」に与える因果効果を捉える！
-## 手法
-繰り返しになりますが、本記事の目標は、「卓球団体戦におけるダブルスの勝敗(=原因変数)」が「団体戦の勝敗(=結果変数)」に与える因果効果(介入効果)の定量化、になります。
-ただ、三点先取の団体戦において、各試合の勝利が団体戦の勝利にPositiveな効果を与える事はそりゃそうだ、自明といっても良いと思います。恐らくPositiveな因果効果が得られると想定されます。
 
-従って今回は、**「ダブルスの勝敗」と「シングルス1の勝敗」が、それぞれ「団体戦の勝敗」に与える因果効果を定量化**します。
-そして**両者の因果効果の大きさを比較する事で、「団体戦においてダブルスが鍵なのか否か」を議論**してみたいと思います。
-```mermaid
-flowchart TD
-A[doublesの勝敗] --> B[Home Teamの勝敗]
-C[Single1の勝敗] --> B
-linkStyle 0 stroke:red
-linkStyle 1 stroke:red
-```
+                # 対戦チーム名(HomeTeam, AwayTeam)を格納する処理
+                block_temp = soup_match.find_all("div", class_="container")[2]
+                block_temp2 = block_temp.find_all("a", class_="font-weight-bold h6")
+                HomeTeam_name, AwayTeam_name = block_temp2[1].text, block_temp2[3].text
+                game_result_dict["HomeTeam_name"] = HomeTeam_name
+                game_result_dict["AwayTeam_name"] = AwayTeam_name
+                print(game_result_dict)
+                return game_result_dict
+            except:
+                return None
 
-交絡因子としては、「ホームチームの地力」と「アウェイチームの地力」を考えました。
-当然、自チームに強い選手(ex. 世界ランク上位、中国選手, etc.)がたくさんいれば、各試合の勝率もあがるし、団体戦の勝率も上がると考えられます。
-(ちなみにここ10年、団体戦において中国チームが他国チームに敗戦しているのを、男女ともに見た事がありません...!)
-また、相手チームの方に強い選手がたくさんいればその逆もしかり、と言えると思います。
-よって今回検討する因果ダイアグラムは、以下のようになります。
-```mermaid
-flowchart TD
-A[doublesの勝敗] --> B[Home Teamの勝敗]
-C[Single1の勝敗] --> B
-D[Home Teamの地力] -->A
-D-->B
-D -->C
-E[Away Teamの地力] --> A
-E-->B
-E-->C
-linkStyle 0 stroke:red
-linkStyle 1 stroke:red
-```
-具体的には「ホームチームの地力」「アウェイチームの地力」の代理指標として、「ホームチームのSランク選手割合」「アウェイチームのSランク選手割合」を用います。
+        # ループ処理で、Seasonの各試合の記録を取ってくる.
+        self.match_result_list = []
+        for i in range(len(self.link_list)):
+            self.match_result_list.append(_get_each_match_record(i))
 
-## 回帰分析の準備
-まあ準備といっても、今回はステップ1の段階でダミー変数化もしていますし、交絡因子として用いる「Sランク選手割合」のカラムも構築済みなので、単にデータをロードするのみです。
 
-```python
-def load_matchData()->pd.DataFrame:
-    '''試合データをpd.DataFrameで読み込み'''
+    def get_team_info(self):
+        '''
+        season_year年シーズンにおける、各チームの選手情報を取得するメソッド。
+        現時点では、チーム内の選手ランクの内訳を取得する.
+        '''
+        # urlを作成
+        if int(self.season_year) == 2018:
+            # 2018年シーズンのHPでは選手ランクが載っていなかった為、とりあえず2019年で代用.
+            url = self.base_url_team + "index.php" + "?year=2019"
+        else:
+            url = self.base_url_team + "index.php" + "?year=" + self.season_year
 
-    INPUT_DIR = r'保存場所\Tleague_scraping'
-    datasets_list = []
+        # urlへリクエスト, HTMLファイルをレスポンスで取得
+        response = requests.get(url)
+        # BeautifulSoupオブジェクトを生成.
+        soup = BeautifulSoup(response.content, "lxml")
 
-    season_years = ["2019", "2020", "2021"]
-    # 各シーズンのデータを読み込み
-    for i, season_year in enumerate(season_years):
-        datasets_list.append(pd.read_csv(os.path.join(INPUT_DIR, f'{season_year}_match_result.csv'), header=0, encoding='utf-8'))
+        # 結果格納用のdict
+        self.team_info_dict ={}
+
+        # 以下は、取得したHTMLファイルから必要な情報を抽出していく処理
+
+        ## 各チームのメンバーの情報が載ってるブロックを抽出
+        team_list = soup.find(class_="page-section page-team bg-light py-50")
+        team_list = team_list.find_all(class_="pt-lg-25")
+        print(len(team_list))
         
-        # シーズンカラムを付与する
-        datasets_list[i]["season_year"] = int(season_year)
+        # チーム一つ一つを繰り返し処理：
+        for team_html in team_list:
+            # 1. チーム名を取得したい...!
+            team_name = team_html.find(name="div", class_="d-inline-block font-size-14 font-size-lg-20 font-weight-bold").text
+            print(team_name)
+            
+            # 2. チーム内の各選手のランクを取得してリストに格納する...!
+            player_rank_list =[]
+            player_list = team_html.find_all(name="div", class_="player-list-item col-4 col-md-3 col-lg-2 mb-30 px-2 px-lg-10")
+            print(len(player_list))
+            
+            for player_html in player_list:
+                # 対象選手のランク情報を取得
+                try:
+                    player_rank = player_html.find_all(name="span")[1].text
+                    # print(player_rank)
+                    player_rank_list.append(player_rank)
+                except:
+                    pass
 
-    # 縦に結合
-    df_dataset = pd.concat(datasets_list)
+            # 3. チーム内の選手ランク毎の人数を集計(S, AAA, AA, A)する
+            rank_count = collections.Counter(player_rank_list)
+            # 4. 「チーム内の選手数におけるS or AAAランク選手の割合」を算出.
+            try:
+                rate_AAA_or_S = (rank_count['AAA'] + rank_count['S']) / len(player_list)
+                rate_S = rank_count['S']/len(player_list)
+            except:
+                pass
 
-    return df_dataset
+            # 5. チーム名+選手ランク毎の人数をdictに格納
+            try:
+                self.team_info_dict[team_name] = {"rank_count_info":rank_count, "rate_AAA_and_S":rate_AAA_or_S, "rate_S":rate_S} 
+                del rate_AAA_or_S, rate_S
+            except:
+                pass
 
-df = load_matchData()
-df.head()
+
+    def save_match_table_as_csv(self, filepath):
+        '''self.match_result_list属性をpd.DataFrameに変換=>csvファイルとして出力する.'''
+        '''# # dictのListを、listのdictに変換(=しなくて良かった！)
+        # self.match_result_dict = {}
+        # dict_keys = ["db", "s1", "s2", "s3", "vm", "HomeTeam_name", "AwayTeam_name"]
+        # for key_name in dict_keys:
+        #     # リスト内包表記で...各keyの結果のListをdictに格納
+        #     self.match_result_dict[key_name] = [i[key_name] for i in self.match_result_list]'''
+
+        # DictのListをDataframeに
+        self.df = pd.DataFrame(data=self.match_result_list[1:])
+        # カラムを並び替えておく
+        columns_order = ["db", "s1", "s2", "s3", "vm", "HomeTeam_name", "AwayTeam_name"]
+        self.df = self.df.reindex(columns=columns_order)
+
+        # 前処理0(vmが行われかったレコードを"00"で補完)
+        self.df['vm'].fillna(value='00', inplace=True)
+
+        # 前処理1(各試合の勝敗のDammy変数化)
+        ## apply()に適用する関数を作成
+        def _get_match_win_dammy(match_score:str)->int:
+            '''
+            apply()メソッド用の関数
+            各試合の勝敗のスコア(ex."03", "31")から、HomeTeamの勝利ダミー変数を作成するInnor Function
+            '''
+            match_score = str(match_score)
+            dif_game = float(match_score[0]) - float(match_score[1])
+            if dif_game > 0.0:
+                return 1
+            else:
+                return 0
+        ## 各試合毎にDammy変数を生成
+        for match_name in ["db", "s1", "s2", "s3", "vm"]:
+            self.df[match_name+f'_HomeWin'] = self.df[match_name].apply(_get_match_win_dammy)
+            print(f'fin {match_name}')
+
+        # 前処理2(Team matchの勝敗のDammy変数化)
+        def _get_HomeTeam_win_dammy(row):
+            '''
+            apply()メソッド用のinnor関数
+            '''
+            # チームの獲得スコアを集計
+            HomeTeam_score = 0
+            for match_name in ["db", "s1", "s2", "s3", "vm"]:
+                HomeTeam_score += row[match_name+'_HomeWin']
+            
+            # 団体戦の勝敗を判定、Return
+            if HomeTeam_score >= 3:
+                return 1
+            else:
+                return 0
+        ## apply()メソッドの実行
+        self.df['HomeTeam_win'] = self.df.apply(_get_HomeTeam_win_dammy, axis=1)
+
+        # 前処理3 (self.team_info_dictから、チームの情報を追加する)
+        ## "チームの地力"として、「チーム内の選手数におけるS or AAAランク選手の割合」を定義
+        def _get_Team_rate_AAA_and_S(value:str)->str:
+            '''
+            apply()メソッド用のinnor関数
+            '''
+            # 「チーム内の選手数におけるS or AAAランク選手の割合」を取得・格納
+            return self.team_info_dict[value]["rate_AAA_and_S"]
+
+        self.df['HomeTeam_rate_AAA_and_S'] = self.df['HomeTeam_name'].apply(_get_Team_rate_AAA_and_S)
+        self.df['AwayTeam_rate_AAA_and_S'] = self.df['AwayTeam_name'].apply(_get_Team_rate_AAA_and_S)
+
+        ## 同様に、"チームの地力"として、「チーム内の選手数におけるSランク選手の割合」を定義
+        def _get_Team_rate_S(value:str)->str:
+            '''
+            apply()メソッド用のinnor関数
+            '''
+            # 「チーム内の選手数におけるS or AAAランク選手の割合」を取得・格納
+            return self.team_info_dict[value]["rate_S"]
+
+        self.df['HomeTeam_rate_S'] = self.df['HomeTeam_name'].apply(_get_Team_rate_S)
+        self.df['AwayTeam_rate_S'] = self.df['AwayTeam_name'].apply(_get_Team_rate_S)
+        
+        # export
+        self.df.to_csv(filepath, index=False, encoding='utf-8')
 ```
-読み込んだ結果は以下です。このデータセットを使って因果効果を分析していきます。
+
+続いて、スクレイピングを実行するファイルです。
+scraping_classで定義したTleagueGameScrapingクラスを用いて、TリーグのHPから試合結果のデータを取得・加工し、csv出力しています。
+<!-- scraping.py -->
+```python:scraping.py
+
+import scraping_class
+
+def main():
+    # set season year
+    season_years = ["2018", "2019", "2020"]
+    # season_year = input("Input season year(2018, 2019, 2020, 2021):")
+    for season_year in season_years:
+    # TleagueGameScrapingオブジェクトをinitialize
+        tgs = scraping_class.TleagueGameScraping(season_year)
+
+        # scraping
+        tgs.get_link() # 各試合のlinkのリストを取得.
+        tgs.get_match_record()
+        # # save
+        tgs.save_match_table_as_csv(filepath=fr'保存したいディレクトリ名\{season_year}_match_result.csv')
+
+        del tgs
+
+if __name__ == "__main__":
+    main()
+
+```
+
+# ステップ0-3 スクレイピングによるデータセット生成
+結果として、以下のデータが得られました。
+手作業で試合結果を打ち込むよりはやはり遙かに速いので、処理が回った瞬間は快楽物質が分泌しまくりました！
+(やはり自動化って最高です！)
+
+<!-- データセット -->
 | db | s1 | s2 | s3 | vm | HomeTeam_name | AwayTeam_name  | db_HomeWin | s1_HomeWin | s2_HomeWin | s3_HomeWin | vm_HomeWin | HomeTeam_win | HomeTeam_rate_AAA_and_S | AwayTeam_rate_AAA_and_S | HomeTeam_rate_S     | AwayTeam_rate_S     | 
 |----|----|----|----|----|---------------|----------------|------------|------------|------------|------------|------------|--------------|-------------------------|-------------------------|---------------------|---------------------| 
 | 12 | 30 | 31 | 23 | 10 | 木下マイスター東京     | 岡山リベッツ         | 0          | 1          | 1          | 0          | 1          | 1            | 0.5555555555555556      | 0.5                     | 0.4444444444444444  | 0.08333333333333333 | 
@@ -161,152 +318,27 @@ df.head()
 | 20 | 31 | 13 | 30 | 00 | 木下マイスター東京     | 琉球アスティーダ       | 1          | 1          | 0          | 1          | 0          | 1            | 0.5555555555555556      | 0.5                     | 0.4444444444444444  | 0.1                 | 
 
 
-## 回帰モデルによる因果効果の推定結果
-### (交絡因子なしVer.)「ダブルスの勝敗」と「シングルス1の勝敗」の因果効果の比較
-まず交絡因子考慮なしVer.で、「ダブルスの勝敗」を説明変数(+定数成分)、「団体戦の勝敗」を被説明変数としてロジスティック回帰モデルを構築してみます。
-```python
-import statsmodels.formula.api as smf
-import statsmodels.api as sm
+各レコードは、1つの団体戦における各試合結果となっています。
+各カラムの定義は、以下の様になっています。
 
-result = smf.glm(formula="HomeTeam_win ~ db_HomeWin", data=df, family=sm.families.Binomial()).fit()
-result.summary()
-```
-得られた回帰係数は以下です。
-| \\         | coef    | std err | z      | P>\|z\| | [0.025 | 0.975] | 
-|------------|---------|---------|--------|---------|--------|--------| 
-| Intercept  | -0.8650 | 0.188   | -4.589 | 0.000   | -1.234 | -0.496 | 
-| db_HomeWin | 1.8635  | 0.273   | 6.822  | 0.000   | 1.328  | 2.399  | 
-
-
-続いて交絡因子考慮なしVer.で、「シングルス1の勝敗」を説明変数(+定数成分)、「団体戦の勝敗」を被説明変数としてロジスティック回帰モデルを構築してみます。
-```python
-result = smf.glm(formula="HomeTeam_win ~ s1_HomeWin", data=df, family=sm.families.Binomial()).fit()
-result.summary()
-```
-
-得られた回帰係数は以下です。
-| \\         | coef    | std err | z      | P>\|z\| | [0.025 | 0.975] | 
-|------------|---------|---------|--------|---------|--------|--------| 
-| Intercept  | -0.9217 | 0.194   | -4.742 | 0.000   | -1.303 | -0.541 | 
-| s1_HomeWin | 1.8957  | 0.274   | 6.922  | 0.000   | 1.359  | 2.433  | 
-
-両回帰モデルで得られた回帰係数を比較すると、「ダブルスの勝敗」は1.86、「シングルス1の勝敗」は1.90となり、やや「シングルス1の勝敗」の方が「団体戦の勝敗」に与える因果効果が大きい結果となりました。
-しかし前述した通り、これらは交絡因子を考慮しないVer.の推定結果です。ここで推定された因果効果には恐らく、交絡因子によって発生した疑似相関の影響が含まれており、正確な因果効果ではない、と考えられます。
-
-従って、因果効果をより正確に推定する為に、交絡因子を考慮したVer.の回帰モデルを構築します。
-
-### (交絡因子ありVer.)「ダブルスの勝敗」と「シングルス1の勝敗」の因果効果の比較
-
-上記(交絡因子なしVer.)の結果を踏まえ、因果効果をより正確に推定する為に、交絡因子として「両チームの地力」を考慮したVer.の回帰モデルを構築します。
-まず「ダブルスの勝敗」「ホームチームのSランク選手割合」「アウェイチームのSランク選手割合」を説明変数(+定数成分)、「団体戦の勝敗」を被説明変数としてロジスティック回帰モデルを構築してみます。
-```python
-result = smf.glm(formula="HomeTeam_win ~ db_HomeWin + HomeTeam_rate_S + AwayTeam_rate_S", data=df, family=sm.families.Binomial()).fit()
-result.summary()
-```
-得られた回帰係数は以下です。
-| \\              | coef    | std err | z      | P>\|z\| | [0.025 | 0.975] | 
-|-----------------|---------|---------|--------|---------|--------|--------| 
-| Intercept       | -0.9394 | 0.435   | -2.160 | 0.031   | -1.792 | -0.087 | 
-| db_HomeWin      | 1.9088  | 0.287   | 6.648  | 0.000   | 1.346  | 2.472  | 
-| HomeTeam_rate_S | 3.5559  | 1.054   | 3.374  | 0.001   | 1.490  | 5.621  | 
-| AwayTeam_rate_S | -3.4833 | 1.060   | -3.285 | 0.001   | -5.561 | -1.405 | 
-
-続いて「シングルス1の勝敗」「ホームチームのSランク選手割合」「アウェイチームのSランク選手割合」を説明変数(+定数成分)、「団体戦の勝敗」を被説明変数としてロジスティック回帰モデルを構築してみます。
-```python
-result = smf.glm(formula="HomeTeam_win ~ s1_HomeWin + HomeTeam_rate_S + AwayTeam_rate_S", data=df, family=sm.families.Binomial()).fit()
-result.summary()
-```
-得られた回帰係数は以下です。
-| \\              | coef    | std err | z      | P>\|z\| | [0.025 | 0.975] | 
-|-----------------|---------|---------|--------|---------|--------|--------| 
-| Intercept       | -0.9206 | 0.433   | -2.127 | 0.033   | -1.769 | -0.072 | 
-| s1_HomeWin      | 1.7802  | 0.281   | 6.342  | 0.000   | 1.230  | 2.330  | 
-| HomeTeam_rate_S | 2.7796  | 1.015   | 2.739  | 0.006   | 0.790  | 4.769  | 
-| AwayTeam_rate_S | -2.6679 | 1.062   | -2.513 | 0.012   | -4.749 | -0.587 | 
-
-結果として、両回帰モデルで得られた回帰係数を比較すると、「ダブルスの勝敗」は1.91、「シングルス1の勝敗」は1.78となり、**「ダブルスの勝敗」の方が「団体戦の勝敗」に与える因果効果が大きい結果となりました。**
-(実際には、ロジスティック回帰における回帰係数は、そのままでは”因果効果の定義”とは一致しません。)
-(通常の一般線形回帰と異なり、シグモイド関数を通して変換してるので...。)
-(でも少なくとも因果効果の大小関係は回帰係数と一致するはずです。)
-(他に疑似相関を与えうる交絡因子がなければですが...)
-
-また、交絡因子として「両チームの地力」を説明変数に加えた事で、**「シングルス1の勝敗」による因果効果の方が「ダブルスの勝敗」よりも大きく低下**しました。
-これは「両チームの地力(ホームチームのSランク選手割合, アウェイチームのSランク選手割合)」が、「シングルス1の勝敗」と「団体戦の勝敗」の間に発生させる疑似相関がより大きかった、と解釈できます。
-**言い換えれば「両チームの地力」は、「ダブルスの勝敗」と「団体戦の勝敗」の関係よりも、「シングルス1の勝敗」と「団体戦の勝敗」の関係に対して、より強く疑似相関を発生**させる。
-```mermaid
-flowchart TD
-A[doublesの勝敗] --> B[Home Teamの勝敗]
-C[Single1の勝敗] --> B
-D[Home Teamの地力] -->A
-D-->B
-D -- ここが強い? -->C
-E[Away Teamの地力] --> A
-E-->B
-E-- ここが強い? -->C
-linkStyle 0 stroke:red
-linkStyle 1 stroke:red
-```
-
-すなわち、「両チームの地力」が「団体戦の勝敗」に与える因果効果は一定とみなすと、「**ダブルスの勝敗」の方が「シングルス1の勝敗」よりも「両チームの地力」の影響を受けづらい**、と解釈できるのではないでしょうか？
-(この「**ダブルスの方が、強い選手にもワンチャンスある**」ともいえる解釈は、卓球選手としても肌感覚・暗黙知にも合致するような気がします！)
-
-## ちなみに...「シングルス2の勝敗」「シングルス3の勝敗」による因果効果とも比較してみた！
-同様に「シングルス2の勝敗」及び「シングルス3の勝敗」においても、交絡因子として「両チームの地力」を考慮したVer.の回帰モデルを構築し、因果効果の定量化・比較してみました。
-
-まずは「シングルス2の勝敗」。
-```python
-result = smf.glm(formula="HomeTeam_win ~ s2_HomeWin + HomeTeam_rate_S + AwayTeam_rate_S", data=df, family=sm.families.Binomial()).fit()
-result.summary()
-```
-| \\              | coef    | std err | z      | P>\|z\| | [0.025 | 0.975] | 
-|-----------------|---------|---------|--------|---------|--------|--------| 
-| Intercept       | -0.6240 | 0.410   | -1.523 | 0.128   | -1.427 | 0.179  | 
-| s2_HomeWin      | 1.4209  | 0.272   | 5.222  | 0.000   | 0.888  | 1.954  | 
-| HomeTeam_rate_S | 2.8155  | 1.014   | 2.776  | 0.006   | 0.828  | 4.803  | 
-| AwayTeam_rate_S | -2.9341 | 1.021   | -2.873 | 0.004   | -4.935 | -0.933 | 
-
-続いて「シングルス3の勝敗」です。
-```python
-result = smf.glm(formula="HomeTeam_win ~ s3_HomeWin + HomeTeam_rate_S + AwayTeam_rate_S", data=df, family=sm.families.Binomial()).fit()
-result.summary()
-```
-| \\              | coef    | std err | z      | P>\|z\| | [0.025 | 0.975] | 
-|-----------------|---------|---------|--------|---------|--------|--------| 
-| Intercept       | -0.4921 | 0.406   | -1.211 | 0.226   | -1.289 | 0.304  | 
-| s3_HomeWin      | 1.1983  | 0.272   | 4.399  | 0.000   | 0.664  | 1.732  | 
-| HomeTeam_rate_S | 3.5263  | 0.992   | 3.556  | 0.000   | 1.583  | 5.470  | 
-| AwayTeam_rate_S | -4.0126 | 1.035   | -3.878 | 0.000   | -6.041 | -1.98  | 
-
-結果として、各回帰モデルで得られた回帰係数を比較すると、「ダブルスの勝敗」は1.91、「シングルス1の勝敗」は1.78、「シングルス2の勝敗」は1.42、「シングルス3の勝敗」は1.20となり、**団体戦の前半の試合ほど因果効果が大きく、後半の試合ほど因果効果が小さい結果**が得られました。
-
-この結果から得られる解釈としては、
-- 同じシングルスでも、団体戦の前半か後半かで因果効果の大きさが異なる。
-- 従って、**今回得られた「ダブルスの勝敗」と「シングルス1の勝敗」が「団体戦の勝敗」に与える因果効果の差**は、「ダブルスかシングルスか」という**試合形式の違いだけではなく**、**「団体戦の試合の順番」の違いが影響している可能性**がある。
-- この現象は、「**ダブルスが団体戦の1試合目に設定されているデータ**」のみを抽出した事で発生した疑似相関、いわゆる「**選択バイアス(Selection Bias)**」の問題が原因？
-  
-もちろんTリーグにおいては、全ての団体戦においてダブルスが1試合目に行われているので、Tリーグに限定していえば、「ダブルスの勝敗」が「団体戦の勝敗」に与える因果効果はある程度、定量評価できたように考えられます。**経験知通り、少なくともTリーグにおいては、他の試合と比較して「ダブルスの勝敗」が「団体戦の勝敗」に与える因果効果が最も大きく、「ダブルスが団体戦の鍵をにぎる」と言えそう**です。
-
+* db, s1, s2, s3, vm (str): その団体戦におけるダブルス、シングルス1, シングルス2, シングルス3, ビクトリーマッチのスコア。ex)db="02"の場合、ゲームカウント0-2でアウェイチームの勝利。
+* HomeTeam_name (str)：その団体戦におけるホームチーム名です。
+* AwayTeam_name (str)：その団体戦におけるアウェイチーム名です。
+* db_HomeWin, s1_HomeWin, s2_HomeWin, s3_HomeWin, vm_HomeWin : その団体戦内のダブルス、シングルス1, シングルス2, シングルス3, ビクトリーマッチにおける、ホームチームの勝利を示すダミー変数。
+* HomeTeam_win：その団体戦における、ホームチームの勝利を示すダミー変数。
+* HomeTeam_rate_AAA_and_S, AwayTeam_rate_AAA_and_S：ホームチーム、もしくはアウェイチームにおける、全選手に占めるAAAランクorSランク選手の割合。
+* HomeTeam_rate_S, AwayTeam_rate_S：ホームチーム、もしくはアウェイチームにおける、全選手に占めるSランク選手の割合。（詳しくは次回の記事で説明しますが、今回の因果推論で"交絡因子"として使用します）
 
 # まとめ
-今回はステップ2として、スクレイピングして作成したデータセットを元に、回帰モデルを用いた統計的因果推論によって、**「卓球団体戦におけるダブルスの勝敗」と「団体戦の勝敗」の因果関係の定量分析**を試みました。
-結果として、**「ダブルスの勝敗」の方が「シングルス1の勝敗」と比較して「団体戦の勝敗」に与える因果効果が大きい結果**となりました。
-この結果は「両チームの地力」を交絡因子として考慮した事で明らかになりました。
-また、この交絡因子の考慮の有無によって「シングルス1の勝敗」による因果効果(回帰係数)がより大きく変動したことから、「**ダブルスの方が、両チームの地力の差による影響が小さい**」、言い換えれば、「**ダブルスの方が、強い選手に対してワンチャンスある**」という、卓球界における肌感覚・経験知に合致する解釈も得られました。
-一方で今回の結果には、「ダブルスかシングルスか」という**試合形式の違いだけではなく**、**「団体戦の試合の順番」の違いが影響している可能性**も示唆されました。
+とりあえず今回、因果効果の推定の為に、Tリーグの試合結果をスクレイピングしてデータセットを収集・作成しました。
+コーディングに関しては、HTML文字列をレスポンスとして受け取った後の、特定の情報を指定して取得する処理の部分に中々苦戦し、お世辞にも綺麗とは言えないコードになっていると思います...。
+しかしまあ、無事にデータセットを作成する事ができ、初めてのスクレイピングとしては満足しています。
+(スクレイピングの処理に関しても、なんか汚いコードだなと思った方はぜひ指摘いただければ嬉しいです！)
 
-もちろん、あくまで「上記のアプローチを採用して分析した結果、こういう解釈・示唆が得られた」という事で、今回の因果推論の結果が絶対的に正確であるという事は全くありません。
-今回採用した手法も長所短所がありますし、本記事で考慮しきれなかった交絡因子も存在している可能性もあります。
-統計的因果推論にも様々な手法があり、色んな分析手法・色んなデータセット等を用いた分析で、同様の結果・解釈が得られれば、より「ダブルスが団体戦の鍵をにぎるか否か」が明らかになっていくのかなと思います：）
+次回以降は、統計的因果推論の手法を用いて、「卓球団体戦におけるダブルスの勝敗」が「団体戦の勝敗」に与える因果効果の向きとその大きさに関して分析していきたいと思います。
+(予定としては、まず次回は「バックドア基準」の話をまとめながら、回帰モデルを用いた因果推論を試してみる予定です！)
 
-ただ個人的には今回の内容にはとても満足していて、交絡因子として「両チームの地力」の考慮の有無によって、「ダブルスの勝敗」と「シングルス1の勝敗」の因果効果の大小関係が逆転したので、そこは工夫してみて良かったな～と思っています笑
-統計的因果推論の良い練習になったような気がします！
-
-次回以降はまだ未定ですが、"回帰モデルによる因果推論"の発展として階層型の回帰モデルを用いて、「ダブルスの勝敗」の因果効果の「Tリーグの各チームにおける個体差」みたいなところを定量化してみたいなと思っています。
-(このチームは特にダブルス大事！このチームはダブルスの重要性低い、みたいな事が定量評価できれば、より意思決定に繋がる分析になる気がします：）)
-その後は、他の統計的因果推論の手法を試してみたいですね！(傾向スコアマッチングとか！機械学習を使った手法とか！)
-
-2回目の投稿という事で、文章的にもMarkdownの構成的にも、稚拙な点が多々あるとは思いますが、**最後までお読みいただきありがとうございました！**
+初投稿という事で、文章的にもMarkdownの構成的にも、稚拙な点が多々あるとは思いますが、**最後までお読みいただきありがとうございました！**
 
 繰り返しになりますが自身の**統計的因果推論やコーディングの練習**を兼ねてますので、**上記分野が好きな方々からツッコミ・コメントをいただけたらとても喜びます**！
 また私同様に、**卓球が好きな方からのコメント・ツッコミもいただけたらとても嬉しいです**！
-

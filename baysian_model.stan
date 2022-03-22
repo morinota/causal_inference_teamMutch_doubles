@@ -46,7 +46,7 @@ transformed parameters{
 
 model{
   //まずは個人差を正規分布から発生させるためのfor roop
-    for (id in 1:N_team){
+    for (id in 1:N_t){
         b0_t[id] ~ normal(0, s_b0_t);
         b1_t[id] ~ normal(0, s_b1_t);
         b2_t[id] ~ normal(0, s_b2_t);
